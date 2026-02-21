@@ -214,20 +214,20 @@ class VitalInferenceEngine:
             float(top_freqs[1]), float(top_mags[1]),
             float(top_freqs[2]), float(top_mags[2]),
             hrv_std,
-            # Fix 1: use raw signal (not norm) for indices 16-19 — matches hbglucose.py training
-            float(np.mean(signal)), float(np.std(signal)),
-            float(np.max(signal)),  float(np.min(signal)),
+            # indices 16-19: raw filtered signal stats (matches hbglucose.py training)
+            float(np.mean(ppg_filt)), float(np.std(ppg_filt)),
+            float(np.max(ppg_filt)),  float(np.min(ppg_filt)),
         ]
 
-        # Fix 7 (hbglucose): AC/DC ratio, entropy, skewness, perfusion index, SQI, cycle shape
+        # Additional optical/shape features (indices 20-26) — same as hbglucose.py
         from scipy.stats import skew as _skew, kurtosis as _kurtosis
-        ac_dc_ratio     = (np.max(signal) - np.min(signal)) / (np.mean(np.abs(signal)) + 1e-9)
-        sig_norm_e      = signal - np.min(signal)
+        ac_dc_ratio     = (np.max(ppg_filt) - np.min(ppg_filt)) / (np.mean(np.abs(ppg_filt)) + 1e-9)
+        sig_norm_e      = ppg_filt - np.min(ppg_filt)
         sig_norm_e      = sig_norm_e / (np.sum(sig_norm_e) + 1e-9)
         entropy         = float(-np.sum(sig_norm_e * np.log(sig_norm_e + 1e-9)))
-        sig_skew        = float(_skew(signal))
-        perfusion_index = (np.max(signal) - np.min(signal)) / (np.mean(signal) + 1e-9)
-        sqi             = float(np.max(cycle) / (np.std(signal) + 1e-6))
+        sig_skew        = float(_skew(ppg_filt))
+        perfusion_index = (np.max(ppg_filt) - np.min(ppg_filt)) / (np.mean(ppg_filt) + 1e-9)
+        sqi             = float(np.max(cycle) / (np.std(ppg_filt) + 1e-6))
         cycle_skew      = float(_skew(cycle))
         cycle_kurt      = float(_kurtosis(cycle))
         features       += [ac_dc_ratio, entropy, sig_skew,       # 20-22

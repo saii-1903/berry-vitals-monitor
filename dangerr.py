@@ -151,33 +151,32 @@ def extract_features(ppg_seg, pr_data_for_segment):
     ]
 
 
-def load_models(model_dir="model"):
+def load_models(model_dir="models"):
+    """Load models saved by danger.py — single global scaler + per-group regressor dicts."""
     models = {}
     try:
-        models["scaler_cls"] = joblib.load(os.path.join(model_dir, "scaler_cls.pkl"))
+        # danger.py saves the scaler as global_feature_scaler.pkl (not scaler_cls.pkl)
+        models["scaler_cls"] = joblib.load(os.path.join(model_dir, "global_feature_scaler.pkl"))
         models["classifier"] = joblib.load(os.path.join(model_dir, "classifier.pkl"))
 
+        # danger.py saves regressors as flat files: hypo_models.pkl, normal_models.pkl, hyper_models.pkl
+        # Each is a dict with keys 'sbp_model' and 'dbp_model' — no subdirectories, no per-group scaler
         for group in ["hypo", "normal", "hyper"]:
-            subdir = os.path.join(model_dir, f"model_{group}")
-            if os.path.exists(subdir):
-                models[f"scaler_{group}"] = joblib.load(
-                    os.path.join(subdir, "scaler.pkl")
-                )
-                models[f"sbp_model_{group}"] = joblib.load(
-                    os.path.join(subdir, "sbp_model.pkl")
-                )
-                models[f"dbp_model_{group}"] = joblib.load(
-                    os.path.join(subdir, "dbp_model.pkl")
-                )
+            path = os.path.join(model_dir, f"{group}_models.pkl")
+            if os.path.exists(path):
+                g = joblib.load(path)
+                models[f"sbp_model_{group}"] = g["sbp_model"]
+                models[f"dbp_model_{group}"] = g["dbp_model"]
             else:
-                print(f"Warning: Models for group '{group}' not found in {subdir}.")
+                print(f"Warning: '{path}' not found — group '{group}' will be skipped in predictions.")
     except Exception as e:
         print(f"Error loading models: {e}")
         return None
     return models
 
 
-def predict_bp(ppg_data, pr_all_data, model_dir="model"):
+
+def predict_bp(ppg_data, pr_all_data, model_dir="models"):
     models = load_models(model_dir)
     if models is None:
         return "Model loading failed. Cannot predict."
@@ -215,29 +214,27 @@ def predict_bp(ppg_data, pr_all_data, model_dir="model"):
         if not feat:
             continue
 
-        # Soft Voting Logic
-        X_cls = models["scaler_cls"].transform(np.array(feat).reshape(1, -1))
-        
-        # Get probabilities for Soft Voting
-        probs = models["classifier"].predict_proba(X_cls)[0]
+        # Soft Voting: use the single global scaler for both classification and regression.
+        # danger.py uses one global scaler — there are NO per-group scalers.
+        X_scaled = models["scaler_cls"].transform(np.array(feat).reshape(1, -1))
+
+        probs   = models["classifier"].predict_proba(X_scaled)[0]
         classes = models["classifier"].classes_
-        
-        weighted_sbp = 0
-        weighted_dbp = 0
-        
+
+        weighted_sbp = 0.0
+        weighted_dbp = 0.0
+
         for idx, cls_name in enumerate(classes):
             prob = probs[idx]
-            if f"scaler_{cls_name}" in models:
-                 X_reg = models[f"scaler_{cls_name}"].transform(np.array(feat).reshape(1, -1))
-                 s_pred = models[f"sbp_model_{cls_name}"].predict(X_reg)[0]
-                 d_pred = models[f"dbp_model_{cls_name}"].predict(X_reg)[0]
-                 weighted_sbp += prob * s_pred
-                 weighted_dbp += prob * d_pred
-        
-        # Get the strict category for reporting
-        predicted_label = classes[np.argmax(probs)]
+            sbp_key = f"sbp_model_{cls_name}"
+            dbp_key = f"dbp_model_{cls_name}"
+            if sbp_key in models and dbp_key in models:
+                weighted_sbp += prob * models[sbp_key].predict(X_scaled)[0]
+                weighted_dbp += prob * models[dbp_key].predict(X_scaled)[0]
 
+        predicted_label = classes[np.argmax(probs)]
         seg_predictions.append((weighted_sbp, weighted_dbp, predicted_label))
+
 
     if len(seg_predictions) < 3:
         return "Prediction cannot be done (not enough valid segments)."
