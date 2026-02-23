@@ -224,12 +224,14 @@ def extract_features(ppg_seg, pr_data_for_segment):
 
 def get_bp_label(sbp, dbp):
     """
-    Categorizes BP into 'hypo', 'normal', or 'hyper'.
-    These thresholds are illustrative and should be chosen based on medical guidelines.
+    Categorize BP using ACC/AHA guidelines.
+    normal = SBP 90-129 AND DBP 60-79
+    hyper  = SBP >= 130 OR  DBP >= 80   (was > 130 / > 80 — missed the boundary)
+    hypo   = SBP < 90  OR  DBP < 60
     """
     if sbp < 90 or dbp < 60:
         return "hypo"
-    elif sbp > 130 or dbp > 80:
+    elif sbp >= 130 or dbp >= 80:   # Fix 2: >= so borderline-high samples labeled hyper
         return "hyper"
     else:
         return "normal"

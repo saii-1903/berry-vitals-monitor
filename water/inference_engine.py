@@ -277,16 +277,19 @@ class VitalInferenceEngine:
 
     # ─── Public API ──────────────────────────────────────────────────────
 
-    def predict_vitals(self, ppg_segment, actual_rate_hz: float = None):
+    def predict_vitals(
+        self,
+        ppg_segment,
+        actual_rate_hz: float = None,
+        age: float = None,
+        gender: str = None,   # 'Male' / 'Female' / None
+        bmi: float = None,
+    ):
         """
-        Run all models on the given PPG segment.
-        BP logic mirrors dangerr.predict_bp() exactly:
-          - medfilt pre-processing
-          - 6 × 5-second segments
-          - soft-voting per segment
-          - consistency check
-          - PR-based SBP post-correction
+        Run all models on a PPG segment and return vitals.
+        Pass age/gender/bmi so Hb & Glucose feature vectors match training.
         """
+
         from scipy.signal import medfilt as _medfilt
         from collections import Counter
 
@@ -358,8 +361,9 @@ class VitalInferenceEngine:
                     if bad_sbp >= 3 or bad_dbp >= 3:
                         print(f"DEBUG BP: inconsistent segments (bad SBP={bad_sbp}, DBP={bad_dbp})")
                     else:
-                        final_sbp = float(np.mean(sbp_vals))
-                        final_dbp = float(np.mean(dbp_vals))
+                        # Fix 4: clamp BP into a physiologically realistic range
+                        final_sbp = float(np.clip(np.mean(sbp_vals), 70, 200))
+                        final_dbp = float(np.clip(np.mean(dbp_vals), 40, 130))
                         category  = Counter([p[2] for p in seg_predictions]).most_common(1)[0][0]
 
                         results["sbp"]         = round(final_sbp, 1)
@@ -367,28 +371,41 @@ class VitalInferenceEngine:
                         results["bp_category"] = category
                         print(f"DEBUG BP: SBP={results['sbp']} DBP={results['dbp']} ({category})")
 
+
         except Exception as e:
             import traceback; traceback.print_exc()
             print(f"DEBUG BP error: {e}")
 
-        # 2. Hemoglobin — independent try/except ─────────────────────────
+        # 2. Hemoglobin ─────────────────────────────────────────────────────
         hg_raw = None
         try:
             hg_raw = self._hb_glu_features(ppg_segment)
             if hg_raw is not None and "hb_model" in self.models:
+                # Append 6 demographic features to match hbglucose.py training:
+                # [age, age², is_senior, gender_bin, age*gender, bmi]
+                age_val    = float(age)    if (age    and 0 < float(age) < 120) else 35.0
+                gender_bin = 1.0           if str(gender).lower() == "male"     else 0.0
+                bmi_val    = float(bmi)    if (bmi    and 10 < float(bmi) < 80) else -1.0
+                demo = [age_val, age_val**2, 1.0 if age_val > 60 else 0.0,
+                        gender_bin, age_val * gender_bin, bmi_val]
                 X_hb = self.models["hb_scaler"].transform(
-                    np.array(hg_raw, dtype=float).reshape(1, -1)
+                    np.array(hg_raw + demo, dtype=float).reshape(1, -1)
                 )
                 results["hb"] = round(float(self.models["hb_model"].predict(X_hb)[0]), 2)
                 print(f"DEBUG Hb: {results['hb']} g/dL")
         except Exception as e:
             print(f"DEBUG Hb error: {e}")
 
-        # 3. Glucose — independent try/except ────────────────────────────
+        # 3. Glucose ──────────────────────────────────────────────────────────
         try:
             if hg_raw is not None and "glucose_model" in self.models:
+                age_val    = float(age)    if (age    and 0 < float(age) < 120) else 35.0
+                gender_bin = 1.0           if str(gender).lower() == "male"     else 0.0
+                bmi_val    = float(bmi)    if (bmi    and 10 < float(bmi) < 80) else -1.0
+                demo = [age_val, age_val**2, 1.0 if age_val > 60 else 0.0,
+                        gender_bin, age_val * gender_bin, bmi_val]
                 X_glu = self.models["glucose_scaler"].transform(
-                    np.array(hg_raw, dtype=float).reshape(1, -1)
+                    np.array(hg_raw + demo, dtype=float).reshape(1, -1)
                 )
                 glu = float(self.models["glucose_model"].predict(X_glu)[0])
                 results["glucose"] = round(max(40.0, min(400.0, glu)), 1)
@@ -397,5 +414,6 @@ class VitalInferenceEngine:
             print(f"DEBUG Glucose error: {e}")
 
         return results if results else None
+
 
 

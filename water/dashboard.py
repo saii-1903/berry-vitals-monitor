@@ -762,7 +762,13 @@ class HydrationDashboard(ctk.CTk):
                     print(f"DEBUG: Actual measured rate: {actual_rate:.1f} Hz")
                 else:
                     actual_rate = fs
-                vitals = self._engine.predict_vitals(seg, actual_rate_hz=actual_rate)
+                vitals = self._engine.predict_vitals(
+                    seg,
+                    actual_rate_hz=actual_rate,
+                    age=getattr(self, '_user_age', None),
+                    gender=getattr(self, '_user_gender', None),
+                    bmi=getattr(self, '_user_bmi', None),
+                )
                 if vitals:
                     print(f"DEBUG: Vitals predicted: {vitals}")
                     cycle_num = len(self._vital_times) + 1
