@@ -144,10 +144,10 @@ class VitalInferenceEngine:
             *f_top,             # 12-14
             *m_top,             # 15-17
             float(hrv),         # 18
-            float(np.mean(ppg_seg)),  # 19
-            float(np.std(ppg_seg)),   # 20
-            float(np.max(ppg_seg)),   # 21
-            float(np.min(ppg_seg)),   # 22
+            float(np.mean(ppg_filt)),  # 19
+            float(np.std(ppg_filt)),   # 20
+            float(np.max(ppg_filt)),   # 21
+            float(np.min(ppg_filt)),   # 22
             pr_mean,            # 23
             pr_std,             # 24
             ri,                 # 25 Reflection Index
@@ -335,6 +335,11 @@ class VitalInferenceEngine:
                     probs   = self.models["bp_classifier"].predict_proba(X)[0]
                     classes = self.models["bp_classifier"].classes_
 
+                    # DEBUG: see what individual models are thinking
+                    prob_dict = dict(zip(classes, np.round(probs, 3)))
+                    if i == 0: # Print only for the first segment to avoid log flooding
+                         print(f"DEBUG: Segment 0 Probs: {prob_dict}")
+
                     # Soft vote: weighted sum across all groups
                     w_sbp = w_dbp = 0.0
                     for idx, cls_name in enumerate(classes):
@@ -342,8 +347,12 @@ class VitalInferenceEngine:
                         key_sbp = f"bp_{cls_name}_sbp"
                         key_dbp = f"bp_{cls_name}_dbp"
                         if key_sbp in self.models:
-                            w_sbp += p * self.models[key_sbp].predict(X)[0]
-                            w_dbp += p * self.models[key_dbp].predict(X)[0]
+                            s_pred = float(self.models[key_sbp].predict(X)[0])
+                            d_pred = float(self.models[key_dbp].predict(X)[0])
+                            if i == 0:
+                                print(f"  -> Model {cls_name}: SBP={s_pred:.1f}, DBP={d_pred:.1f} (p={p:.2f})")
+                            w_sbp += p * s_pred
+                            w_dbp += p * d_pred
 
                     label = classes[np.argmax(probs)]
                     seg_predictions.append((w_sbp, w_dbp, label))

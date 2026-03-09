@@ -719,8 +719,8 @@ class HydrationDashboard(ctk.CTk):
             try:
                 raw = np.array(self._raw_pleth_for_analysis, dtype=float)
 
-                # Normalize pleth (0-100) to ~0-2 volt-like range
-                raw_norm = raw / 50.0
+                # Use original pleth scale (0-100) to match ML model training expectations
+                raw_norm = raw
 
                 fs = cfg.SIMULATION_SPEED_HZ if self._simulate else cfg.BERRY_DEFAULT_RATE_HZ
                 analysis_rate = fs
