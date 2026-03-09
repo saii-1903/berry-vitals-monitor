@@ -363,7 +363,7 @@ def train_models(X, Y_sbp, Y_dbp, labels, patient_ids, output_dir="model"):
 
     # ── 1. Classifier (Logistic Regression) ──────────────────────────────
     print("\n--- Training Classifier ---")
-    clf = LogisticRegression(max_iter=1000, class_weight='balanced', solver='liblinear')
+    clf = LogisticRegression(max_iter=1000, class_weight='balanced', solver='lbfgs')
     clf.fit(X_train_sc, l_train)
     print(f"Classifier Accuracy (subject-independent test): "
           f"{accuracy_score(l_test, clf.predict(X_test_sc)):.4f}")

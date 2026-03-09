@@ -5,8 +5,8 @@ import numpy as np
 from scipy.signal import resample
 
 # CONFIGURATION
-INPUT_FOLDER = "hyper_only"   # Folder where your old JSONs are
-OUTPUT_FOLDER = "hyperonly_training_data_200hz"   # Folder where you will put ALL data (Old + New)
+INPUT_FOLDER = "data/27may"   # Folder where your old JSONs are
+OUTPUT_FOLDER = "data/training_data_200hz"   # Folder where you will put ALL data (Old + New)
 OLD_FS = 120                      # Your old sampling rate
 NEW_FS = 200                      # Your new target sampling rate (200 Hz)
 
